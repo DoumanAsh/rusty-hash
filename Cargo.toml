@@ -5,6 +5,7 @@ description = "Simple cli utility to calculate file checksums"
 authors = ["Douman <douman@gmx.se>"]
 license = "MIT"
 keywords = ["checksum"]
+repository = "https://github.com/DoumanAsh/rusty-hash"
 
 [dependencies]
 rust-crypto = "^0.2.34"
