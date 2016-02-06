@@ -1,0 +1,19 @@
+[package]
+name = "rusty-hash"
+version = "1.0.0"
+description = "Simple cli utility to calculate file checksums"
+authors = ["Douman <douman@gmx.se>"]
+license = "MIT"
+keywords = ["checksum"]
+
+[dependencies]
+rust-crypto = "^0.2.34"
+memmap = "^0.2.3"
+
+[[bin]]
+name = "rusty-hash"
+path = "src/main.rs"
+
+[lib]
+name = "checksum"
+path = "src/checksum.rs"
