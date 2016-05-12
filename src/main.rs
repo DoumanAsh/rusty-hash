@@ -23,9 +23,10 @@ Algorithms:
 
 Mode:
     Mutually exclusive.
-    -c --check  Verifies checksum from files.
-    -o --output Write calculations into files with corresponding extension.
-    -p --print  Prints checksums to stdout. Default.
+    -c --check       Verifies checksum from files.
+    -o --output      Write calculations into files with corresponding extension.
+    -i --interactive Enters into interactive mode where you can input or drop two files to compare.
+    -p --print       Prints checksums to stdout. Default.
 ";
 
 macro_rules! input {
@@ -41,6 +42,7 @@ enum FlagType {
     Print,
     Output,
     Check,
+    Interactive
 }
 
 ///Parses cli arguments and returns tuple with following elements:
@@ -89,6 +91,13 @@ fn parse_args() -> Option<(Vec<String>, Vec<Checksum>, FlagType)> {
                     }
                     Some(FlagType::Print)
                 },
+                "-i" | "--interactive" => flag = {
+                    if flag.is_some() {
+                        println!(">>>Multiple mode options are set!");
+                        return None;
+                    }
+                    Some(FlagType::Interactive)
+                },
                 arg @ _ => {
                     println!(">>>Invalid option {}", arg);
                     return None;
@@ -117,6 +126,130 @@ fn parse_args() -> Option<(Vec<String>, Vec<Checksum>, FlagType)> {
     Some((paths, checksums, flag.unwrap()))
 }
 
+fn normal_mode(paths: &Vec<String>, checksums: &mut Vec<Checksum>, flag: FlagType) {
+    for path in paths {
+        if let Ok(file) = std::fs::File::open(&path) {
+            println!(">>>File: {}", &path);
+
+            let file = Mmap::open(&file, Protection::Read).expect("Failed to create file map for reading");
+            let bytes: &[u8] = unsafe { file.as_slice() };
+
+            for algo in checksums.iter_mut() {
+                algo.reset();
+                algo.input(bytes);
+            }
+
+            for algo in checksums.iter_mut() {
+                match flag {
+                    FlagType::Output => {
+                        let file_name = format!("{}.{}", &path, algo.get_file_ext());
+                        if let Ok(mut file) = std::fs::File::create(&file_name) {
+                            file.write_fmt(format_args!("{}\n", algo.checksum())).unwrap();
+                            println!("{}{}", algo.get_type_string(), &file_name);
+                        }
+                        else {
+                            println!("{}Unable to create file with checksum!", algo.get_type_string());
+                        }
+                    },
+                    FlagType::Check => {
+                        let file_name = format!("{}.{}", &path, algo.get_file_ext());
+                        if let Ok(mut file) = std::fs::File::open(&file_name) {
+                            let mut expected_checksum = String::new();
+                            if file.read_to_string(&mut expected_checksum).is_ok() {
+                                if expected_checksum.trim() == algo.checksum() {
+                                    println!("{}OK", algo.get_type_string());
+                                }
+                                else {
+                                    println!("{}NOT_OK", algo.get_type_string());
+                                }
+                            }
+                            else {
+                                println!("{}Failed to get checksum from file!", algo.get_type_string());
+                            }
+                        }
+                        else {
+                            println!("{}No checksum file!", algo.get_type_string());
+                        }
+                    },
+                    FlagType::Print => {
+                        println!("{}", algo.result());
+                    },
+                    _ => (),
+                }
+            }
+        }
+        else {
+            println!(">>>{}: failed to open", &path);
+        }
+        println!("=======================================================\n");
+    }
+}
+
+fn interactive_mode(checksums: &mut Vec<Checksum>) {
+    let trim_pattern: &[_] = &['\"'];
+    let mut file1 = String::new();
+    print!("Enter path to a first file: ");
+    std::io::stdout().flush().unwrap();
+    std::io::stdin().read_line(&mut file1).expect("Failed to read from stdin");
+    let file1 = file1.trim().trim_matches(trim_pattern);
+
+    println!("");
+    if !path::Path::new(&file1).is_file() {
+        println!(">>>Cannot find file: {}", file1);
+        return;
+    }
+
+    let mut file2 = String::new();
+    print!("Enter path to a second file: ");
+    std::io::stdout().flush().unwrap();
+    std::io::stdin().read_line(&mut file2).expect("Failed to read from stdin");
+    let file2 = file2.trim().trim_matches(trim_pattern);
+
+    println!("");
+    if !path::Path::new(&file2).is_file() {
+        println!(">>>Cannot find file: {}", file2);
+        return;
+    }
+
+    let mut result_file1 = vec![];
+
+    if let Ok(file) = std::fs::File::open(&file1) {
+        let file = Mmap::open(&file, Protection::Read).expect("Failed to create file map for reading");
+        let bytes: &[u8] = unsafe { file.as_slice() };
+
+        for algo in checksums.iter_mut() {
+            algo.reset();
+            algo.input(bytes);
+            result_file1.push(algo.checksum());
+        }
+
+    }
+    else {
+        println!(">>>Cannot open file: {}", file1);
+        return;
+    }
+
+    if let Ok(file) = std::fs::File::open(&file2) {
+        let file = Mmap::open(&file, Protection::Read).expect("Failed to create file map for reading");
+        let bytes: &[u8] = unsafe { file.as_slice() };
+        for (idx, algo) in checksums.iter_mut().enumerate() {
+            algo.reset();
+            algo.input(bytes);
+
+            if result_file1[idx] == algo.checksum() {
+                println!("{}OK", algo.get_type_string());
+            }
+            else {
+                println!("{}NOT_OK", algo.get_type_string());
+            }
+        }
+    }
+    else {
+        println!(">>>Cannot open file: {}", file2);
+        return;
+    }
+}
+
 fn main() {
     if cmd_args().len() < 2 {
         println!("{}", USAGE);
@@ -124,61 +257,11 @@ fn main() {
     }
 
     if let Some((paths, mut checksums, flag)) = parse_args() {
-        for path in paths {
-            if let Ok(file) = std::fs::File::open(&path) {
-                println!(">>>File: {}", &path);
-
-                let file = Mmap::open(&file, Protection::Read).expect("Failed to create file map for reading");
-                let bytes: &[u8] = unsafe { file.as_slice() };
-
-                for algo in checksums.iter_mut() {
-                    algo.reset();
-                    algo.input(bytes);
-                }
-
-                for algo in checksums.iter_mut() {
-                    match flag {
-                        FlagType::Output => {
-                            let file_name = format!("{}.{}", &path, algo.get_file_ext());
-                            if let Ok(mut file) = std::fs::File::create(&file_name) {
-                                file.write_fmt(format_args!("{}\n", algo.checksum())).unwrap();
-                                println!("{}{}", algo.get_type_string(), &file_name);
-                            }
-                            else {
-                                println!("{}Unable to create file with checksum!", algo.get_type_string());
-                            }
-                        },
-                        FlagType::Check => {
-                            let file_name = format!("{}.{}", &path, algo.get_file_ext());
-                            if let Ok(mut file) = std::fs::File::open(&file_name) {
-                                let mut expected_checksum = String::new();
-                                if file.read_to_string(&mut expected_checksum).is_ok() {
-                                    if expected_checksum.trim() == algo.checksum() {
-                                        println!("{}OK", algo.get_type_string());
-                                    }
-                                    else {
-                                        println!("{}NOT_OK", algo.get_type_string());
-                                    }
-                                }
-                                else {
-                                    println!("{}Failed to get checksum from file!", algo.get_type_string());
-                                }
-                            }
-                            else {
-                                println!("{}No checksum file!", algo.get_type_string());
-                            }
-                        },
-                        FlagType::Print => {
-                            println!("{}", algo.result());
-                        },
-                    }
-                }
-            }
-            else {
-                println!(">>>{}: failed to open", &path);
-            }
-            println!("=======================================================\n");
+        match flag {
+            FlagType::Interactive => interactive_mode(&mut checksums),
+            _ => normal_mode(&paths, &mut checksums, flag),
         }
+
     }
     else {
         println!("{}", USAGE);

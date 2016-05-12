@@ -1,6 +1,6 @@
 [package]
 name = "rusty-hash"
-version = "1.0.0"
+version = "1.1.0"
 description = "Simple cli utility to calculate file checksums"
 authors = ["Douman <douman@gmx.se>"]
 license = "MIT"
