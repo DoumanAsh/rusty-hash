@@ -7,6 +7,9 @@ license = "MIT"
 keywords = ["checksum"]
 repository = "https://github.com/DoumanAsh/rusty-hash"
 
+[profile.release]
+lto = true
+
 [dependencies]
 rust-crypto = "^0.2.34"
 memmap = "^0.2.3"
