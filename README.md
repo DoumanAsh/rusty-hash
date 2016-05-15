@@ -1,5 +1,7 @@
 # rusty-hash
 
+[![Build status](https://ci.appveyor.com/api/projects/status/l0r5rxi0keg8unw7/branch/master?svg=true)](https://ci.appveyor.com/project/DoumanAsh/rusty-hash/branch/master)
+
 Simple utility for checksum calculation
 
 ```

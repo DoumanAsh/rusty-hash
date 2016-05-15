@@ -1,16 +1,13 @@
 
 environment:
   global:
+    NEW_TAG: "none"
     PROJECT_NAME: rusty-hash
   matrix:
-    # Stable channel
+    # Stable channel only?
     - TARGET: i686-pc-windows-gnu
       CHANNEL: stable
-    - TARGET: i686-pc-windows-msvc
-      CHANNEL: stable
     - TARGET: x86_64-pc-windows-gnu
-      CHANNEL: stable
-    - TARGET: x86_64-pc-windows-msvc
       CHANNEL: stable
 
 # Install Rust and Cargo
@@ -29,24 +26,24 @@ install:
 
 build: false
 
-# Equivalent to Travis' `script` phase
-# TODO modify this phase as you see fit
 test_script:
   - cargo build
-  - cargo run
-  - cargo test
+  - powershell -version 3 -File is_release.ps1
 
 before_deploy:
   # Generate artifacts for release
   - cargo build --release
   - mkdir staging
-  - copy target\release\rusty-hash.exe staging
+  - copy target\release\*.exe staging\
   - cd staging
-  - 7z a ../%PROJECT_NAME%-%APPVEYOR_REPO_TAG_NAME%-%TARGET%.zip *
-  - appveyor PushArtifact ../%PROJECT_NAME%-%APPVEYOR_REPO_TAG_NAME%-%TARGET%.zip
+  - 7z a ../%PROJECT_NAME%-%TARGET%.zip *
+  - appveyor PushArtifact ../%PROJECT_NAME%-%TARGET%.zip
 
 deploy:
-  description: 'Windows release'
+  # Release should be the same as tag's trigger. Otherwise you'll create new tag
+  tag: "$(APPVEYOR_REPO_TAG_NAME)"
+  release: "$(APPVEYOR_REPO_TAG_NAME)"
+  description: "Just monitor and VN script"
   # All the zipped artifacts will be deployed
   artifact: /.*\.zip/
   auth_token:
