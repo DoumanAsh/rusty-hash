@@ -37,8 +37,6 @@ test_script:
   - cargo test
 
 after_test:
-  - ps: echo "$env:APPVEYOR_PULL_REQUEST_NUMBER"
-  - ps: echo "$env:APPVEYOR_PULL_REQUEST_TITLE"
   # Generate artifacts for release if needed
   - ps: |
       if ($env:APPVEYOR_REPO_TAG -eq "true") {
