@@ -1,17 +1,21 @@
+branches:
+  only:
+    - master
 
 environment:
   git_token:
     secure: H5PQSeh6rHOoDLktlYlVLYu/iJMTwzzNVk8Wr//nqbYC7xrJuGDwKwiev/0Bl2d3
   global:
-    NEW_TAG: "none"
     PROJECT_NAME: rusty-hash
-    MAIL: "douman@gmx.se"
   matrix:
     # Stable channel only?
     - TARGET: i686-pc-windows-gnu
       CHANNEL: stable
     - TARGET: x86_64-pc-windows-gnu
       CHANNEL: stable
+
+matrix:
+  fast_finish: true
 
 # Install Rust and Cargo
 # (Based on from https://github.com/rust-lang/libc/blob/master/appveyor.yml)
@@ -30,23 +34,52 @@ install:
 build: false
 
 test_script:
-  - cargo build
-  - powershell -version 3 -File is_release.ps1
+  - cargo test
 
-before_deploy:
-  # Generate artifacts for release
-  - cargo build --release
-  - mkdir staging
-  - copy target\release\*.exe staging\
-  - cd staging
-  - 7z a ../%PROJECT_NAME%-%TARGET%.zip *
-  - appveyor PushArtifact ../%PROJECT_NAME%-%TARGET%.zip
+after_test:
+  - ps: echo "$env:APPVEYOR_PULL_REQUEST_NUMBER"
+  - ps: echo "$env:APPVEYOR_PULL_REQUEST_TITLE"
+  # Generate artifacts for release if needed
+  - ps: |
+      if ($env:APPVEYOR_REPO_TAG -eq "true") {
+          echo "Generate artifact for tag($env:APPVEYOR_REPO_TAG_NAME)"
+          cargo build --release -q 2> $null
+          mkdir staging
+          cp target\release\*.exe staging\
+          cd staging
+          7z a "../$env:PROJECT_NAME-$env:TARGET.zip" * > $null
+          Push-AppveyorArtifact "../$env:PROJECT_NAME-$env:TARGET.zip"
+      }
+      elseif ([string]::IsNullOrEmpty($env:APPVEYOR_PULL_REQUEST_NUMBER)) {
+          # Non-tag build. Check if we need to publish new crate version
+          $version = Select-String -Path Cargo.toml -pattern  '\d{1,3}.\d{1,3}.\d{1,3}' | Select-Object -First 1
+          $version = $version.Line.split('=')[1].trim()
+          $version = $version.substring(1, $version.Length-2)
+          echo "Build crate version($version)"
 
+          git tag -a $version -m "$version" 2> $null
+
+          if ($LASTEXITCODE -eq 0) {
+              echo "Publish new crate version"
+              # Use AppVeyor API to set variables properly within one build job
+              Set-AppveyorBuildVariable -Name "APPVEYOR_REPO_TAG_NAME" -Value $version
+              Set-AppveyorBuildVariable -Name "APPVEYOR_REPO_TAG" -Value "true"
+          }
+          else {
+              echo "New version publish is not required"
+          }
+      }
+      else {
+          echo "Skip deploy on PR"
+      }
+
+#Since AppVeyor is pretty stupid we deploy empty release first.
+#This triggers normal tag push so the second build will actually deploy stuff
 deploy:
   # Release should be the same as tag's trigger. Otherwise you'll create new tag
   tag: "$(APPVEYOR_REPO_TAG_NAME)"
   release: "$(APPVEYOR_REPO_TAG_NAME)"
-  description: "Just monitor and VN script"
+  description: "Just hash calc utility"
   # All the zipped artifacts will be deployed
   artifact: /.*\.zip/
   auth_token: "$(git_token)"
@@ -55,6 +88,3 @@ deploy:
     CHANNEL: stable
     appveyor_repo_tag: true
 
-branches:
-  only:
-    - master
